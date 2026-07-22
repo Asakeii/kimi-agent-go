@@ -195,6 +195,9 @@ func (h HookResolved) MarshalJSON() ([]byte, error) {
 }
 
 func (h *HookResolved) validate() error {
+	if h.Action == "" {
+		return nil
+	}
 	if h.Action != HookAllow && h.Action != HookBlock {
 		return fmt.Errorf("wire: invalid hook action %q", h.Action)
 	}

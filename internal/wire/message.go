@@ -35,15 +35,15 @@ type Mergeable interface {
 
 type eventMarker struct{}
 
-func (eventMarker) isMessage() {}
-func (eventMarker) isEvent()   {}
+func (*eventMarker) isMessage() {}
+func (*eventMarker) isEvent()   {}
 
 type requestMarker struct{}
 
-func (requestMarker) isMessage() {}
-func (requestMarker) isRequest() {}
+func (*requestMarker) isMessage() {}
+func (*requestMarker) isRequest() {}
 
 type contentPartMarker struct{ eventMarker }
 
-func (contentPartMarker) wireType() string { return "ContentPart" }
-func (contentPartMarker) isContentPart()   {}
+func (*contentPartMarker) wireType() string { return "ContentPart" }
+func (*contentPartMarker) isContentPart()   {}

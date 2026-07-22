@@ -48,7 +48,7 @@ func (w *Wire) SubscribeMerged(capacity int) (*Subscription, error) {
 }
 
 func (w *Wire) Send(message Message) error {
-	if message == nil {
+	if isNilMessage(message) {
 		return errors.New("wire: cannot send nil message")
 	}
 

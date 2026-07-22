@@ -3,6 +3,7 @@ package wire
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
 )
 
 type Envelope struct {
@@ -12,8 +13,13 @@ type Envelope struct {
 
 // Encode 将 Message 编码为 Envelope
 func Encode(message Message) (Envelope, error) {
-	if message == nil {
+	if isNilMessage(message) {
 		return Envelope{}, fmt.Errorf("wire: cannot encode nil message")
+	}
+	if validator, ok := message.(interface{ validate() error }); ok {
+		if err := validator.validate(); err != nil {
+			return Envelope{}, err
+		}
 	}
 
 	payload, err := json.Marshal(message)
@@ -25,6 +31,19 @@ func Encode(message Message) (Envelope, error) {
 		Type:    message.wireType(),
 		Payload: payload,
 	}, nil
+}
+
+func isNilMessage(message Message) bool {
+	if message == nil {
+		return true
+	}
+	value := reflect.ValueOf(message)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return value.IsNil()
+	default:
+		return false
+	}
 }
 
 // Decode 将 Envelope 解码为 Message

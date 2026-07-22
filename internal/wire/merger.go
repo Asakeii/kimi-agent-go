@@ -8,7 +8,7 @@ type merger struct {
 
 // push 尝试把下一块消息合并进当前缓冲区，如果无法合并，则返回当前缓冲区的消息，并将下一块消息作为新的缓冲区
 func (m *merger) push(message Message) ([]Message, error) {
-	if message == nil {
+	if isNilMessage(message) {
 		return nil, fmt.Errorf("wire: cannot merge nil message")
 	}
 

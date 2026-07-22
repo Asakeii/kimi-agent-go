@@ -13,7 +13,7 @@ type DisplayBlock interface {
 
 type displayBlockMarker struct{}
 
-func (displayBlockMarker) isDisplayBlock() {}
+func (*displayBlockMarker) isDisplayBlock() {}
 
 type UnknownDisplayBlock struct {
 	displayBlockMarker
