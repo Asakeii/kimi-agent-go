@@ -165,7 +165,8 @@ func NewTextInput(text string) UserInput {
 }
 
 func NewPartsInput(parts ...ContentPart) UserInput {
-	copied := append([]ContentPart(nil), parts...)
+	copied := make([]ContentPart, len(parts))
+	copy(copied, parts)
 	return UserInput{kind: userInputParts, parts: copied}
 }
 
@@ -177,7 +178,9 @@ func (u UserInput) Parts() ([]ContentPart, bool) {
 	if u.kind != userInputParts {
 		return nil, false
 	}
-	return append([]ContentPart(nil), u.parts...), true
+	copied := make([]ContentPart, len(u.parts))
+	copy(copied, u.parts)
+	return copied, true
 }
 
 func (u UserInput) MarshalJSON() ([]byte, error) {

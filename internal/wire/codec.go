@@ -88,6 +88,10 @@ var messageFactories = map[string]func() Message{
 	"PlanDisplay":     func() Message { return &PlanDisplay{} },
 	"BtwBegin":        func() Message { return &BtwBegin{} },
 	"BtwEnd":          func() Message { return &BtwEnd{} },
+	"ToolCall":        func() Message { return &ToolCall{} },
+	"ToolCallPart":    func() Message { return &ToolCallPart{} },
+	"ToolResult":      func() Message { return &ToolResult{} },
+	"SubagentEvent":   func() Message { return &SubagentEvent{} },
 }
 
 var contentPartFactories = map[string]func() ContentPart{
