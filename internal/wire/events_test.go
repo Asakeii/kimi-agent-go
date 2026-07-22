@@ -25,6 +25,16 @@ func TestControlAndStatusEventJSONCompatibility(t *testing.T) {
 			want:    `{"type":"StepBegin","payload":{"n":1}}`,
 		},
 		{
+			name:    "hook defaults",
+			message: &HookTriggered{Event: "PreToolUse"},
+			want:    `{"type":"HookTriggered","payload":{"event":"PreToolUse","target":"","hook_count":1}}`,
+		},
+		{
+			name:    "hook resolution defaults",
+			message: &HookResolved{Event: "PreToolUse"},
+			want:    `{"type":"HookResolved","payload":{"event":"PreToolUse","target":"","action":"allow","reason":"","duration_ms":0}}`,
+		},
+		{
 			name: "step retry",
 			message: &StepRetry{
 				N: 1, NextAttempt: 2, MaxAttempts: 3, WaitSeconds: 1.25,

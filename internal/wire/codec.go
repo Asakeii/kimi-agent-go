@@ -44,6 +44,11 @@ func Decode(envelope Envelope) (Message, error) {
 	if err := json.Unmarshal(envelope.Payload, message); err != nil {
 		return nil, fmt.Errorf("wire: failed to unmarshal %s: %w", envelope.Type, err)
 	}
+	if validator, ok := message.(interface{ validate() error }); ok {
+		if err := validator.validate(); err != nil {
+			return nil, err
+		}
+	}
 	return message, nil
 }
 
@@ -71,27 +76,34 @@ func decodeContentPart(payload json.RawMessage) (ContentPart, error) {
 }
 
 var messageFactories = map[string]func() Message{
-	"TurnBegin":       func() Message { return &TurnBegin{} },
-	"SteerInput":      func() Message { return &SteerInput{} },
-	"TurnEnd":         func() Message { return &TurnEnd{} },
-	"StepBegin":       func() Message { return &StepBegin{} },
-	"StepInterrupted": func() Message { return &StepInterrupted{} },
-	"StepRetry":       func() Message { return &StepRetry{} },
-	"CompactionBegin": func() Message { return &CompactionBegin{} },
-	"CompactionEnd":   func() Message { return &CompactionEnd{} },
-	"HookTriggered":   func() Message { return &HookTriggered{HookCount: 1} },
-	"HookResolved":    func() Message { return &HookResolved{Action: "allow"} },
-	"MCPLoadingBegin": func() Message { return &MCPLoadingBegin{} },
-	"MCPLoadingEnd":   func() Message { return &MCPLoadingEnd{} },
-	"StatusUpdate":    func() Message { return &StatusUpdate{} },
-	"Notification":    func() Message { return &Notification{Payload: map[string]any{}} },
-	"PlanDisplay":     func() Message { return &PlanDisplay{} },
-	"BtwBegin":        func() Message { return &BtwBegin{} },
-	"BtwEnd":          func() Message { return &BtwEnd{} },
-	"ToolCall":        func() Message { return &ToolCall{} },
-	"ToolCallPart":    func() Message { return &ToolCallPart{} },
-	"ToolResult":      func() Message { return &ToolResult{} },
-	"SubagentEvent":   func() Message { return &SubagentEvent{} },
+	"TurnBegin":        func() Message { return &TurnBegin{} },
+	"SteerInput":       func() Message { return &SteerInput{} },
+	"TurnEnd":          func() Message { return &TurnEnd{} },
+	"StepBegin":        func() Message { return &StepBegin{} },
+	"StepInterrupted":  func() Message { return &StepInterrupted{} },
+	"StepRetry":        func() Message { return &StepRetry{} },
+	"CompactionBegin":  func() Message { return &CompactionBegin{} },
+	"CompactionEnd":    func() Message { return &CompactionEnd{} },
+	"HookTriggered":    func() Message { return &HookTriggered{HookCount: 1} },
+	"HookResolved":     func() Message { return &HookResolved{Action: "allow"} },
+	"MCPLoadingBegin":  func() Message { return &MCPLoadingBegin{} },
+	"MCPLoadingEnd":    func() Message { return &MCPLoadingEnd{} },
+	"StatusUpdate":     func() Message { return &StatusUpdate{} },
+	"Notification":     func() Message { return &Notification{Payload: map[string]any{}} },
+	"PlanDisplay":      func() Message { return &PlanDisplay{} },
+	"BtwBegin":         func() Message { return &BtwBegin{} },
+	"BtwEnd":           func() Message { return &BtwEnd{} },
+	"ToolCall":         func() Message { return &ToolCall{} },
+	"ToolCallPart":     func() Message { return &ToolCallPart{} },
+	"ToolResult":       func() Message { return &ToolResult{} },
+	"SubagentEvent":    func() Message { return &SubagentEvent{} },
+	"ApprovalResponse": func() Message { return &ApprovalResponse{} },
+	"ApprovalRequest":  func() Message { return &ApprovalRequest{} },
+	"QuestionRequest":  func() Message { return &QuestionRequest{} },
+	"ToolCallRequest":  func() Message { return &ToolCallRequest{} },
+	"HookRequest":      func() Message { return &HookRequest{InputData: map[string]any{}} },
+	// Wire v1 used this name for ApprovalResponse.
+	"ApprovalRequestResolved": func() Message { return &ApprovalResponse{} },
 }
 
 var contentPartFactories = map[string]func() ContentPart{

@@ -48,11 +48,11 @@ type HookTriggered struct {
 
 type HookResolved struct {
 	eventMarker
-	Event      string `json:"event"`
-	Target     string `json:"target"`
-	Action     string `json:"action"`
-	Reason     string `json:"reason"`
-	DurationMS int    `json:"duration_ms"`
+	Event      string     `json:"event"`
+	Target     string     `json:"target"`
+	Action     HookAction `json:"action"`
+	Reason     string     `json:"reason"`
+	DurationMS int        `json:"duration_ms"`
 }
 
 type MCPServerSnapshot struct {
@@ -176,6 +176,29 @@ func (s MCPServerSnapshot) MarshalJSON() ([]byte, error) {
 		s.Tools = []string{}
 	}
 	return json.Marshal(alias(s))
+}
+
+func (h HookTriggered) MarshalJSON() ([]byte, error) {
+	type alias HookTriggered
+	if h.HookCount == 0 {
+		h.HookCount = 1
+	}
+	return json.Marshal(alias(h))
+}
+
+func (h HookResolved) MarshalJSON() ([]byte, error) {
+	type alias HookResolved
+	if h.Action == "" {
+		h.Action = HookAllow
+	}
+	return json.Marshal(alias(h))
+}
+
+func (h *HookResolved) validate() error {
+	if h.Action != HookAllow && h.Action != HookBlock {
+		return fmt.Errorf("wire: invalid hook action %q", h.Action)
+	}
+	return nil
 }
 
 func (s MCPStatusSnapshot) MarshalJSON() ([]byte, error) {
