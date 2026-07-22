@@ -87,3 +87,25 @@ func TestThinkPartStopsMergingAfterSignature(t *testing.T) {
 		t.Fatalf("signature was not preserved: %#v", part)
 	}
 }
+
+func TestMergerBuffersNonConcatenatingContentPart(t *testing.T) {
+	var merger merger
+	ready, err := merger.push(NewImageURLPart("https://example.com/image.png"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ready) != 0 {
+		t.Fatalf("got %d ready messages, want 0", len(ready))
+	}
+
+	ready, err = merger.push(&TurnEnd{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ready) != 2 {
+		t.Fatalf("got %d ready messages, want 2", len(ready))
+	}
+	if _, ok := ready[0].(*ImageURLPart); !ok {
+		t.Fatalf("got %T, want *ImageURLPart", ready[0])
+	}
+}

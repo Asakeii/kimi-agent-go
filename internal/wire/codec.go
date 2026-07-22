@@ -29,26 +29,22 @@ func Encode(message Message) (Envelope, error) {
 
 // Decode 将 Envelope 解码为 Message
 func Decode(envelope Envelope) (Message, error) {
-	switch envelope.Type {
-	case "ContentPart":
+	if envelope.Type == "ContentPart" {
 		return decodeContentPart(envelope.Payload)
-	case "TurnBegin":
-		var event TurnBegin
-		if err := json.Unmarshal(envelope.Payload, &event); err != nil {
-			return nil, fmt.Errorf("wire: failed to unmarshal TurnBegin: %w", err)
-		}
-		return &event, nil
-	case "TurnEnd":
-		var event TurnEnd
-		if err := json.Unmarshal(envelope.Payload, &event); err != nil {
-			return nil, fmt.Errorf("wire: failed to unmarshal TurnEnd: %w", err)
-		}
-		return &event, nil
-	case "":
+	}
+	if envelope.Type == "" {
 		return nil, fmt.Errorf("wire: envelope type is empty")
-	default:
+	}
+
+	factory, ok := messageFactories[envelope.Type]
+	if !ok {
 		return nil, fmt.Errorf("wire: unknown envelope type: %s", envelope.Type)
 	}
+	message := factory()
+	if err := json.Unmarshal(envelope.Payload, message); err != nil {
+		return nil, fmt.Errorf("wire: failed to unmarshal %s: %w", envelope.Type, err)
+	}
+	return message, nil
 }
 
 // decodeContentPart 解码 ContentPart
@@ -60,22 +56,44 @@ func decodeContentPart(payload json.RawMessage) (ContentPart, error) {
 		return nil, fmt.Errorf("wire: failed to unmarshal ContentPart header: %w", err)
 	}
 
-	switch header.Type {
-	case "text":
-		var textPart TextPart
-		if err := json.Unmarshal(payload, &textPart); err != nil {
-			return nil, fmt.Errorf("wire: failed to unmarshal TextPart: %w", err)
-		}
-		return &textPart, nil
-	case "think":
-		var thinkPart ThinkPart
-		if err := json.Unmarshal(payload, &thinkPart); err != nil {
-			return nil, fmt.Errorf("wire: failed to unmarshal ThinkPart: %w", err)
-		}
-		return &thinkPart, nil
-	case "":
+	if header.Type == "" {
 		return nil, fmt.Errorf("wire: ContentPart type is empty")
-	default:
+	}
+	factory, ok := contentPartFactories[header.Type]
+	if !ok {
 		return nil, fmt.Errorf("wire: unknown ContentPart type: %s", header.Type)
 	}
+	part := factory()
+	if err := json.Unmarshal(payload, part); err != nil {
+		return nil, fmt.Errorf("wire: failed to unmarshal %s ContentPart: %w", header.Type, err)
+	}
+	return part, nil
+}
+
+var messageFactories = map[string]func() Message{
+	"TurnBegin":       func() Message { return &TurnBegin{} },
+	"SteerInput":      func() Message { return &SteerInput{} },
+	"TurnEnd":         func() Message { return &TurnEnd{} },
+	"StepBegin":       func() Message { return &StepBegin{} },
+	"StepInterrupted": func() Message { return &StepInterrupted{} },
+	"StepRetry":       func() Message { return &StepRetry{} },
+	"CompactionBegin": func() Message { return &CompactionBegin{} },
+	"CompactionEnd":   func() Message { return &CompactionEnd{} },
+	"HookTriggered":   func() Message { return &HookTriggered{HookCount: 1} },
+	"HookResolved":    func() Message { return &HookResolved{Action: "allow"} },
+	"MCPLoadingBegin": func() Message { return &MCPLoadingBegin{} },
+	"MCPLoadingEnd":   func() Message { return &MCPLoadingEnd{} },
+	"StatusUpdate":    func() Message { return &StatusUpdate{} },
+	"Notification":    func() Message { return &Notification{Payload: map[string]any{}} },
+	"PlanDisplay":     func() Message { return &PlanDisplay{} },
+	"BtwBegin":        func() Message { return &BtwBegin{} },
+	"BtwEnd":          func() Message { return &BtwEnd{} },
+}
+
+var contentPartFactories = map[string]func() ContentPart{
+	"text":      func() ContentPart { return &TextPart{} },
+	"think":     func() ContentPart { return &ThinkPart{} },
+	"image_url": func() ContentPart { return &ImageURLPart{} },
+	"audio_url": func() ContentPart { return &AudioURLPart{} },
+	"video_url": func() ContentPart { return &VideoURLPart{} },
 }
