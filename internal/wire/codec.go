@@ -32,6 +32,12 @@ func Decode(envelope Envelope) (Message, error) {
 	switch envelope.Type {
 	case "ContentPart":
 		return decodeContentPart(envelope.Payload)
+	case "TurnEnd":
+		var event TurnEnd
+		if err := json.Unmarshal(envelope.Payload, &event); err != nil {
+			return nil, fmt.Errorf("wire: failed to unmarshal TurnEnd: %w", err)
+		}
+		return &event, nil
 	case "":
 		return nil, fmt.Errorf("wire: envelope type is empty")
 	default:

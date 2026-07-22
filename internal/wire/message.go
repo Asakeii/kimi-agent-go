@@ -31,7 +31,13 @@ type Request interface {
 // ContentPart Event 的内容部分，主要用于模型向 UI 输出的内容事件
 type ContentPart interface {
 	Event
-	isContentpart()
+	isContentPart()
+}
+
+type Mergeable interface {
+	Message
+	Clone() Mergeable                 // 复制一份作为 merged 缓冲，防止修改 raw 消息
+	MergeInPlace(next Mergeable) bool // 尝试把下一块合进当前对象，成功返回 true
 }
 
 // TextPart 支持模型输出的 chunk，TextPart是ContentPart的一种实现
@@ -40,9 +46,21 @@ type TextPart struct {
 }
 
 type ThinkPart struct {
-	Text      string
-	Encrypted *string // 表示是否加密
+	Think     string
+	Encrypted *string // 模型返回的加密 reasoning signature
 }
+
+type TurnEnd struct{}
+
+func (*TurnEnd) wireType() string {
+	return "TurnEnd"
+}
+
+func (*TurnEnd) isMessage() {}
+
+func (*TurnEnd) isEvent() {}
+
+var _ Event = (*TurnEnd)(nil)
 
 // NewTextPart 创建一个新的 TextPart 实例
 func NewTextPart(text string) *TextPart {
@@ -51,10 +69,57 @@ func NewTextPart(text string) *TextPart {
 	}
 }
 
-func NewThinkPart(text string) *ThinkPart {
+// NewThinkPart 创建一个新的 ThinkPart 实例
+func NewThinkPart(think string) *ThinkPart {
 	return &ThinkPart{
-		Text: text,
+		Think: think,
 	}
+}
+
+// Clone 负责创建不影响 raw 消息的合并副本，副本将用于 MergeInPlace 方法中，防止修改原始消息，原始消息会被用于流式输出
+func (t *TextPart) Clone() Mergeable {
+	return &TextPart{
+		Text: t.Text,
+	}
+}
+
+// MergeInPlace 负责把后续流式碎片不断追加到这个副本上，流结束后副本用于保存完整消息
+func (t *TextPart) MergeInPlace(next Mergeable) bool {
+	other, ok := next.(*TextPart) // 类型断言，确保 next 是 TextPart 类型
+	if !ok {
+		return false
+	}
+
+	t.Text += other.Text
+	return true
+}
+
+// Clone 创建独立的思考块副本，避免 merged 缓冲修改 raw 消息。
+func (t *ThinkPart) Clone() Mergeable {
+	cloned := &ThinkPart{Think: t.Think}
+	if t.Encrypted != nil {
+		encrypted := *t.Encrypted
+		cloned.Encrypted = &encrypted
+	}
+	return cloned
+}
+
+// MergeInPlace 合并连续的思考块。已有非空签名时不能继续追加内容。
+func (t *ThinkPart) MergeInPlace(next Mergeable) bool {
+	other, ok := next.(*ThinkPart)
+	if !ok {
+		return false
+	}
+	if t.Encrypted != nil && *t.Encrypted != "" {
+		return false
+	}
+
+	t.Think += other.Think
+	if other.Encrypted != nil && *other.Encrypted != "" {
+		encrypted := *other.Encrypted
+		t.Encrypted = &encrypted
+	}
+	return true
 }
 
 func (t *TextPart) wireType() string {
@@ -62,18 +127,20 @@ func (t *TextPart) wireType() string {
 }
 func (t *TextPart) isMessage()     {}
 func (t *TextPart) isEvent()       {}
-func (t *TextPart) isContentpart() {}
+func (t *TextPart) isContentPart() {}
 
 func (t *ThinkPart) wireType() string {
 	return "ContentPart"
 }
 func (t *ThinkPart) isMessage()     {}
 func (t *ThinkPart) isEvent()       {}
-func (t *ThinkPart) isContentpart() {}
+func (t *ThinkPart) isContentPart() {}
 
 // 编译期检查
 var _ ContentPart = (*TextPart)(nil)
 var _ ContentPart = (*ThinkPart)(nil)
+var _ Mergeable = (*TextPart)(nil)
+var _ Mergeable = (*ThinkPart)(nil)
 
 // MarshalJSON 实现了自定义的 JSON 序列化方法，将 TextPart 序列化为 JSON 格式
 func (t *TextPart) MarshalJSON() ([]byte, error) {
@@ -90,11 +157,11 @@ func (t *TextPart) MarshalJSON() ([]byte, error) {
 func (t *ThinkPart) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
 		Type      string  `json:"type"`
-		Text      string  `json:"text"`
-		Encrypted *string `json:"encrypted,omitempty"`
+		Think     string  `json:"think"`
+		Encrypted *string `json:"encrypted"`
 	}{
 		Type:      "think",
-		Text:      t.Text,
+		Think:     t.Think,
 		Encrypted: t.Encrypted,
 	})
 }
@@ -127,23 +194,22 @@ func (t *TextPart) UnmarshalJSON(data []byte) error {
 func (t *ThinkPart) UnmarshalJSON(data []byte) error {
 	var payload struct {
 		Type      string  `json:"type"`
-		Text      *string `json:"text"`
-		Encrypted *string `json:"encrypted,omitempty"`
+		Think     *string `json:"think"`
+		Encrypted *string `json:"encrypted"`
 	}
 
 	if err := json.Unmarshal(data, &payload); err != nil {
 		return err
 	}
 
-	if payload.Text == nil {
-		return fmt.Errorf("think part is missing text")
-	}
-
 	if payload.Type != "think" {
 		return fmt.Errorf("invalid type for ThinkPart: %s", payload.Type)
 	}
+	if payload.Think == nil {
+		return fmt.Errorf("think part is missing think")
+	}
 
-	t.Text = *payload.Text
+	t.Think = *payload.Think
 	t.Encrypted = payload.Encrypted
 
 	return nil
