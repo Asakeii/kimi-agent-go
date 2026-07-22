@@ -5,6 +5,7 @@ wire 是 kimi-agent-go 内部的消息传递协议，主要用于模型与UI之�
 Message 是所有 wire 消息的基类
 */
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 )
@@ -49,6 +50,121 @@ type ThinkPart struct {
 	Think     string
 	Encrypted *string // 模型返回的加密 reasoning signature
 }
+
+type userInputKind uint8
+
+const (
+	userInputInvalid userInputKind = iota
+	userInputText
+	userInputParts
+)
+
+// UserInput 对应 Python 的 str | list[ContentPart] 联合类型。
+type UserInput struct {
+	kind  userInputKind
+	text  string
+	parts []ContentPart
+}
+
+func NewTextInput(text string) UserInput {
+	return UserInput{kind: userInputText, text: text}
+}
+
+func NewPartsInput(parts ...ContentPart) UserInput {
+	copied := make([]ContentPart, len(parts))
+	copy(copied, parts)
+	return UserInput{kind: userInputParts, parts: copied}
+}
+
+func (u UserInput) Text() (string, bool) {
+	return u.text, u.kind == userInputText
+}
+
+func (u UserInput) Parts() ([]ContentPart, bool) {
+	if u.kind != userInputParts {
+		return nil, false
+	}
+	copied := make([]ContentPart, len(u.parts))
+	copy(copied, u.parts)
+	return copied, true
+}
+
+func (u UserInput) MarshalJSON() ([]byte, error) {
+	switch u.kind {
+	case userInputText:
+		return json.Marshal(u.text)
+	case userInputParts:
+		for i, part := range u.parts {
+			if part == nil {
+				return nil, fmt.Errorf("wire: user input part %d is nil", i)
+			}
+		}
+		return json.Marshal(u.parts)
+	default:
+		return nil, fmt.Errorf("wire: user input is not initialized")
+	}
+}
+
+func (u *UserInput) UnmarshalJSON(data []byte) error {
+	data = bytes.TrimSpace(data)
+	if len(data) == 0 {
+		return fmt.Errorf("wire: user input is empty")
+	}
+
+	switch data[0] {
+	case '"':
+		var text string
+		if err := json.Unmarshal(data, &text); err != nil {
+			return fmt.Errorf("wire: decode text input: %w", err)
+		}
+		*u = NewTextInput(text)
+		return nil
+	case '[':
+		var rawParts []json.RawMessage
+		if err := json.Unmarshal(data, &rawParts); err != nil {
+			return fmt.Errorf("wire: decode content parts: %w", err)
+		}
+		parts := make([]ContentPart, 0, len(rawParts))
+		for i, rawPart := range rawParts {
+			part, err := decodeContentPart(rawPart)
+			if err != nil {
+				return fmt.Errorf("wire: decode user input part %d: %w", i, err)
+			}
+			parts = append(parts, part)
+		}
+		*u = NewPartsInput(parts...)
+		return nil
+	default:
+		return fmt.Errorf("wire: user input must be a string or content-part array")
+	}
+}
+
+type TurnBegin struct {
+	UserInput UserInput `json:"user_input"`
+}
+
+func NewTurnBegin(userInput UserInput) *TurnBegin {
+	return &TurnBegin{UserInput: userInput}
+}
+
+func (*TurnBegin) wireType() string { return "TurnBegin" }
+func (*TurnBegin) isMessage()       {}
+func (*TurnBegin) isEvent()         {}
+
+func (t *TurnBegin) UnmarshalJSON(data []byte) error {
+	var payload struct {
+		UserInput json.RawMessage `json:"user_input"`
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return err
+	}
+	if len(payload.UserInput) == 0 {
+		return fmt.Errorf("wire: TurnBegin is missing user_input")
+	}
+	return json.Unmarshal(payload.UserInput, &t.UserInput)
+}
+
+var _ Event = (*TurnBegin)(nil)
 
 type TurnEnd struct{}
 
