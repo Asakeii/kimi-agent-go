@@ -3,6 +3,8 @@ package wire
 import (
 	"errors"
 	"io"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -79,6 +81,68 @@ func TestSubscribeAfterClose(t *testing.T) {
 	}
 	if _, err := w.SubscribeRaw(1); !errors.Is(err, ErrClosed) {
 		t.Fatalf("got %v, want ErrClosed", err)
+	}
+}
+
+func TestWireRecordsMergedMessages(t *testing.T) {
+	wireFile, err := OpenWireFile(filepath.Join(t.TempDir(), "wire.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	w, err := NewWithFile(wireFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, message := range []Message{
+		NewTextPart("Hello"),
+		NewTextPart(" world"),
+		&TurnEnd{},
+	} {
+		if err := w.Send(message); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Join(); err != nil {
+		t.Fatal(err)
+	}
+
+	records, err := wireFile.ReadRecords()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(records) != 2 {
+		t.Fatalf("got %d records, want 2", len(records))
+	}
+	assertTextMessage(t, decodeRecord(t, records[0]), "Hello world")
+	assertTurnEnd(t, decodeRecord(t, records[1]))
+}
+
+func TestWireJoinReturnsRecorderFailure(t *testing.T) {
+	dir := t.TempDir()
+	blockedParent := filepath.Join(dir, "not-a-directory")
+	wireFile, err := OpenWireFile(filepath.Join(blockedParent, "wire.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(blockedParent, []byte("file"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	w, err := NewWithFile(wireFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Send(&TurnEnd{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Join(); err == nil {
+		t.Fatal("expected recorder error")
 	}
 }
 

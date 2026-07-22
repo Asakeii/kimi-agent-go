@@ -9,11 +9,12 @@ var ErrClosed = errors.New("wire: closed")
 
 // Wire broadcasts runtime messages to raw and merged Eino streams.
 type Wire struct {
-	mu     sync.Mutex
-	closed bool
-	merger merger
-	raw    *broadcaster
-	merged *broadcaster
+	mu       sync.Mutex
+	closed   bool
+	merger   merger
+	raw      *broadcaster
+	merged   *broadcaster
+	recorder *wireRecorder
 }
 
 func New() *Wire {
@@ -21,6 +22,21 @@ func New() *Wire {
 		raw:    newBroadcaster(),
 		merged: newBroadcaster(),
 	}
+}
+
+// NewWithFile creates a Wire whose complete, merged messages are recorded in wireFile.
+func NewWithFile(wireFile *WireFile) (*Wire, error) {
+	if wireFile == nil {
+		return nil, errors.New("wire: record file cannot be nil")
+	}
+
+	w := New()
+	subscription, err := w.SubscribeMerged(1)
+	if err != nil {
+		return nil, err
+	}
+	w.recorder = newWireRecorder(wireFile, subscription)
+	return w, nil
 }
 
 func (w *Wire) SubscribeRaw(capacity int) (*Subscription, error) {
@@ -74,6 +90,14 @@ func (w *Wire) Close() error {
 	w.raw.close()
 	w.merged.close()
 	return nil
+}
+
+// Join waits until the optional recorder has consumed every message published before Close.
+func (w *Wire) Join() error {
+	if w.recorder == nil {
+		return nil
+	}
+	return w.recorder.join()
 }
 
 func (w *Wire) publishMerged(messages []Message) error {
